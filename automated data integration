@@ -4,15 +4,15 @@ DROP TABLE IF EXISTS detailed;
 CREATE TABLE detailed(
 	sales_amount 	DECIMAL(9,2),
 	payment_date 	TIMESTAMP,
-	store_id 		  SMALLINT,
-	address_id 		SMALLINT,
-	address 		  VARCHAR(50)
+	store_id 	SMALLINT,
+	address_id 	SMALLINT,
+	address 	VARCHAR(50)
 );
 
 DROP TABLE IF EXISTS summary;
 CREATE TABLE summary(
 	sales_total 	DECIMAL(16,2),
-	address 		  VARCHAR(50)
+	address 	VARCHAR(50)
 );
 
 --Extract and insert raw data into detailed table
