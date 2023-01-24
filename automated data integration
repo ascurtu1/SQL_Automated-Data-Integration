@@ -1,0 +1,110 @@
+--Create detailed and summary tables
+
+DROP TABLE IF EXISTS detailed;
+CREATE TABLE detailed(
+	sales_amount 	DECIMAL(9,2),
+	payment_date 	TIMESTAMP,
+	store_id 		  SMALLINT,
+	address_id 		SMALLINT,
+	address 		  VARCHAR(50)
+);
+
+DROP TABLE IF EXISTS summary;
+CREATE TABLE summary(
+	sales_total 	DECIMAL(16,2),
+	address 		  VARCHAR(50)
+);
+
+--Extract and insert raw data into detailed table
+
+INSERT INTO detailed(
+	sales_amount,
+	payment_date,
+	store_id,
+	address_id,
+	address)
+SELECT
+payment.amount,
+payment.payment_date,
+customer.store_id,
+store.address_id,
+address.address
+FROM payment
+INNER JOIN customer
+ON payment.customer_id = customer.customer_id
+INNER JOIN store
+ON customer.store_id=store.store_id
+INNER JOIN address
+ON store.address_id = address.address_id;
+
+--Verify data accuracy
+
+SELECT COUNT(sales_amount)
+FROM detailed;
+
+SELECT COUNT(amount)
+FROM payment;
+
+--Write code for function that will perform the transformation
+--The function will transform the sales_amount from the detailed table with an aggregation and will refresh the summary table with the transformation
+
+CREATE OR REPLACE FUNCTION refresh_summary()
+RETURNS TRIGGER
+AS $$
+BEGIN
+DELETE FROM summary;
+INSERT INTO summary(
+SELECT
+SUM(sales_amount) AS sales_total,
+address
+FROM detailed
+GROUP BY address
+ORDER BY sales_total
+);
+RETURN NEW;
+END; $$ LANGUAGE PLPGSQL;
+
+--Create a trigger 
+--The trigger will automatically update the summary table when changes are made to the detailed table
+
+CREATE TRIGGER refresh_summary_trigger
+AFTER INSERT ON detailed
+FOR EACH STATEMENT
+EXECUTE PROCEDURE refresh_summary();
+
+--Create a stored procedure
+--The stored procedure will refresh data in both the detailed and summary tables by clearing the contents and performing an ETL load process
+--The stored procedure should be run quarterly to ensure data freshness
+
+CREATE PROCEDURE refresh_reports()
+LANGUAGE PLPGSQL
+AS $$
+BEGIN 
+DELETE FROM detailed;
+INSERT INTO detailed(
+	sales_amount,
+	payment_date,
+	store_id,
+	address_id,
+	address)
+SELECT
+	payment.amount,
+	payment.payment_date,
+	customer.store_id,
+	store.address_id,
+	address.address
+FROM payment
+INNER JOIN customer
+ON payment.customer_id = customer.customer_id
+INNER JOIN store
+ON customer.store_id=store.store_id
+INNER JOIN address
+ON store.address_id = address.address_id;
+END; $$;
+
+--To call stored procedure
+CALL refresh_reports();
+
+--To view the results
+SELECT * from detailed;
+SELECT * FROM summary;
