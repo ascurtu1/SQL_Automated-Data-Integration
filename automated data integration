@@ -1,43 +1,61 @@
---Create detailed and summary tables
+--Creating business reports from DVD Rental that show which store location has the highest sales
+
+--B: Create detailed and summary tables
 
 DROP TABLE IF EXISTS detailed;
 CREATE TABLE detailed(
-	sales_amount 	DECIMAL(9,2),
-	payment_date 	TIMESTAMP,
-	store_id 	SMALLINT,
-	address_id 	SMALLINT,
-	address 	VARCHAR(50)
+	sales_amount 		DECIMAL(9,2),
+	payment_date 		TIMESTAMP,
+	store_id 		SMALLINT,
+	address_id 		SMALLINT,
+	address 		VARCHAR(50),
+	city_id			SMALLINT,
+	city			VARCHAR(20),
+	country_id		SMALLINT,
+	country			VARCHAR(20)
 );
 
 DROP TABLE IF EXISTS summary;
 CREATE TABLE summary(
 	sales_total 	DECIMAL(16,2),
-	address 	VARCHAR(50)
+	full_address 	VARCHAR(50)
 );
 
---Extract and insert raw data into detailed table
+--C: Extract and insert raw data into detailed table
 
 INSERT INTO detailed(
 	sales_amount,
 	payment_date,
 	store_id,
 	address_id,
-	address)
+	address,
+	city_id,
+	city,
+	country_id,
+	country)
 SELECT
-payment.amount,
-payment.payment_date,
-customer.store_id,
-store.address_id,
-address.address
+	payment.amount,
+	payment.payment_date,
+	customer.store_id,
+	store.address_id,
+	address.address,
+	address.city_id,
+	city.city,
+	city.country_id,
+	country.country
 FROM payment
 INNER JOIN customer
 ON payment.customer_id = customer.customer_id
 INNER JOIN store
 ON customer.store_id=store.store_id
 INNER JOIN address
-ON store.address_id = address.address_id;
+ON store.address_id = address.address_id
+INNER JOIN city
+ON address.city_id = city.city_id
+INNER JOIN country
+ON city.country_id = country.country_id;
 
---Verify data accuracy
+--C: Verify data accuracy
 
 SELECT COUNT(sales_amount)
 FROM detailed;
@@ -45,8 +63,9 @@ FROM detailed;
 SELECT COUNT(amount)
 FROM payment;
 
---Write code for function that will perform the transformation
---The function will transform the sales_amount from the detailed table with an aggregation and will refresh the summary table with the transformation
+--D: Write code for function that will perform the transformation
+--The function will transform the address, city, and country fields by concatenation and create a new field, full_address
+--A aggregation function, SUM() is also performed to compute the sales_total
 
 CREATE OR REPLACE FUNCTION refresh_summary()
 RETURNS TRIGGER
@@ -56,15 +75,15 @@ DELETE FROM summary;
 INSERT INTO summary(
 SELECT
 SUM(sales_amount) AS sales_total,
-address
+CONCAT(address,'', city,'', country) AS full_address
 FROM detailed
-GROUP BY address
+GROUP BY full_address
 ORDER BY sales_total
 );
 RETURN NEW;
 END; $$ LANGUAGE PLPGSQL;
 
---Create a trigger 
+--E: Create a trigger 
 --The trigger will automatically update the summary table when changes are made to the detailed table
 
 CREATE TRIGGER refresh_summary_trigger
@@ -72,9 +91,10 @@ AFTER INSERT ON detailed
 FOR EACH STATEMENT
 EXECUTE PROCEDURE refresh_summary();
 
---Create a stored procedure
+--F: Create a stored procedure
 --The stored procedure will refresh data in both the detailed and summary tables by clearing the contents and performing an ETL load process
---The stored procedure should be run quarterly to ensure data freshness
+--The stored procedure should be run quarterly to ensure data freshness 
+--It can be run using the pgAgent scheduling tool
 
 CREATE PROCEDURE refresh_reports()
 LANGUAGE PLPGSQL
@@ -86,20 +106,32 @@ INSERT INTO detailed(
 	payment_date,
 	store_id,
 	address_id,
-	address)
+	address,
+	city_id,
+	city,
+	country_id,
+	country)
 SELECT
 	payment.amount,
 	payment.payment_date,
 	customer.store_id,
 	store.address_id,
-	address.address
+	address.address,
+	address.city_id,
+	city.city,
+	city.country_id,
+	country.country
 FROM payment
 INNER JOIN customer
 ON payment.customer_id = customer.customer_id
 INNER JOIN store
 ON customer.store_id=store.store_id
 INNER JOIN address
-ON store.address_id = address.address_id;
+ON store.address_id = address.address_id
+INNER JOIN city
+ON address.city_id = city.city_id
+INNER JOIN country
+ON city.country_id = country.country_id;
 END; $$;
 
 --To call stored procedure
